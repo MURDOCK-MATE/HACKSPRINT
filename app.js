@@ -12,7 +12,7 @@ const MW = (() => {
             hour: '2-digit',
             minute: '2-digit'
         });
-    }acdvdfbdsdbf
+    }
 
     function getStatusColor(status) {
         switch(status) {
