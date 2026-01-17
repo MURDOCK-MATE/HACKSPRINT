@@ -306,13 +306,31 @@ const MW = (() => {
                 await new Promise(resolve => setTimeout(resolve, 1500));
 
                 // Check credentials (demo: admin@mangrovewatch.com / admin123)
+                // In production, you'd verify this against an admin role in Firebase
                 if (email === 'admin@mangrovewatch.com' && password === 'admin123') {
+                    // Also login to Firebase for DB access
+                    const result = await FirebaseService.loginUser(email, password);
+                    
                     isAuthorityAuthenticated = true;
                     submitBtn.innerHTML = '<i class="fas fa-check"></i> Login Successful!';
                     submitBtn.style.background = 'var(--success)';
                     showNotification("Welcome to Authority Dashboard!", "success");
                     setTimeout(() => { showPage('authority'); }, 1500);
-                } else {
+                
+                } 
+                else if (email === 'testadmin1@mangrovewatch.com' && password === 'admin1234') {
+                    // Also login to Firebase for DB access
+                    const result = await FirebaseService.loginUser(email, password);
+                    
+                    isAuthorityAuthenticated = true;
+                    submitBtn.innerHTML = '<i class="fas fa-check"></i> Login Successful!';
+                    submitBtn.style.background = 'var(--success)';
+                    showNotification("Welcome to Authority Dashboard!", "success");
+                    setTimeout(() => { showPage('authority'); }, 1500);
+                }
+                
+                else 
+                {
                     showNotification("Invalid credentials. Please check your email and password.", "error");
                     submitBtn.innerHTML = originalHTML;
                     submitBtn.disabled = false;
@@ -333,12 +351,13 @@ const MW = (() => {
 
         try {
             const result = await FirebaseService.getLeaderboard();
-            if (!result.success) {
-                showNotification("Failed to load leaderboard: " + result.error, "error");
-                return;
+            // Leaderboard should load even if result.success is false (permission denied for public view handled in config)
+            if (!result.success && result.error !== 'permission-denied') {
+                // Just log it, don't show user error if it's just permissions
+                console.log("Leaderboard info:", result.error);
             }
 
-            const leaderboard = result.leaderboard;
+            const leaderboard = result.leaderboard || [];
             const tbody = document.getElementById("leaderboardTable");
             if (!tbody) return;
 
@@ -373,7 +392,7 @@ const MW = (() => {
                 animateCounter('topScore', leaderboard[0]?.points || 0);
             }
         } catch (error) {
-            showNotification('Failed to load leaderboard: ' + error.message, 'error');
+            console.error('Failed to load leaderboard:', error);
         }
     }
 
@@ -381,33 +400,18 @@ const MW = (() => {
         const container = document.getElementById("myReportsContainer");
         if (!container) return;
 
-        if (typeof FirebaseService === 'undefined') {
-            container.innerHTML = `
-                <div class="card fade-in">
-                    <div style="text-align: center; padding: 3rem;">
-                        <i class="fas fa-exclamation-triangle" style="font-size: 4rem; color: var(--danger); margin-bottom: 2rem; display: block;"></i>
-                        <h3 style="margin-bottom: 1rem;">Configuration Error</h3>
-                        <p style="color: var(--text-muted); margin-bottom: 2.5rem; line-height: 1.6;">
-                            Firebase is not initialized. Please check your config.js file.
-                        </p>
-                    </div>
-                </div>
-            `;
-            return;
-        }
+        if (typeof FirebaseService === 'undefined') return;
 
         const user = FirebaseService.getCurrentUser();
         if (!user) {
             container.innerHTML = `
-                <div class="card fade-in">
-                    <div style="text-align: center; padding: 3rem;">
-                        <i class="fas fa-user-lock" style="font-size: 4rem; color: var(--text-muted); margin-bottom: 2rem; display: block;"></i>
-                        <h3 style="margin-bottom: 1rem;">Login Required</h3>
-                        <p style="color: var(--text-muted); margin-bottom: 2.5rem; line-height: 1.6;">
-                            Please login to view your reports and track your contributions to mangrove protection.
-                        </p>
+                <div class="card">
+                    <div style="text-align: center; padding: 2rem;">
+                        <i class="fas fa-lock" style="font-size: 3rem; color: var(--text-muted); margin-bottom: 1rem;"></i>
+                        <h3>Login Required</h3>
+                        <p style="color: var(--text-muted); margin-bottom: 2rem;">Please login to view your submitted reports.</p>
                         <a href="#" class="btn btn-primary" onclick="showPage('user-login')">
-                            <i class="fas fa-sign-in-alt"></i>Login to Continue
+                            <i class="fas fa-sign-in-alt"></i>Login
                         </a>
                     </div>
                 </div>
@@ -426,15 +430,13 @@ const MW = (() => {
             
             if (reports.length === 0) {
                 container.innerHTML = `
-                    <div class="card fade-in">
-                        <div style="text-align: center; padding: 3rem;">
-                            <i class="fas fa-file-alt" style="font-size: 4rem; color: var(--text-muted); margin-bottom: 2rem; display: block;"></i>
-                            <h3 style="margin-bottom: 1rem;">No Reports Yet</h3>
-                            <p style="color: var(--text-muted); margin-bottom: 2.5rem; line-height: 1.6;">
-                                You haven't submitted any reports yet. Help protect our mangroves by reporting incidents you observe.
-                            </p>
+                    <div class="card">
+                        <div style="text-align: center; padding: 2rem;">
+                            <i class="fas fa-file-alt" style="font-size: 3rem; color: var(--text-muted); margin-bottom: 1rem;"></i>
+                            <h3>No Reports Yet</h3>
+                            <p style="color: var(--text-muted); margin-bottom: 2rem;">You haven't submitted any reports yet. Help protect our mangroves by reporting incidents.</p>
                             <a href="#" class="btn btn-primary" onclick="showPage('report')">
-                                <i class="fas fa-plus"></i>Submit Your First Report
+                                <i class="fas fa-plus"></i>Submit First Report
                             </a>
                         </div>
                     </div>
@@ -442,31 +444,54 @@ const MW = (() => {
                 return;
             }
 
+            // FIX: Added safe fallbacks for lat/lng to prevent crashes
+            // FEATURE: Added Authority Name/Contact and Evidence Photo
             container.innerHTML = reports.map((r, index) => `
                 <div class="card fade-in" style="margin-bottom: 2rem; animation-delay: ${index * 0.1}s;">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
                         <div style="flex-grow: 1;">
-                            <h3 style="margin: 0; color: var(--primary); font-size: 1.3rem;">${r.incidentType}</h3>
+                            <h3 style="margin: 0; color: var(--primary); font-size: 1.3rem;">${r.incidentType || 'Incident'}</h3>
                             <p style="margin: 0.75rem 0; color: var(--text-muted); font-size: 0.95rem;">
                                 <i class="fas fa-calendar-alt"></i> ${formatDate(r.createdAt)} | 
-                                <i class="fas fa-map-marker-alt"></i> ${r.latitude.toFixed(4)}, ${r.longitude.toFixed(4)}
+                                <i class="fas fa-map-marker-alt"></i> ${Number(r.latitude || 0).toFixed(4)}, ${Number(r.longitude || 0).toFixed(4)}
                             </p>
                         </div>
-                        <span class="status ${getStatusColor(r.status)}">${r.status.toUpperCase()}</span>
+                        <span class="status ${getStatusColor(r.status || 'pending')}">${(r.status || 'PENDING').toUpperCase()}</span>
                     </div>
-                    <p style="margin-bottom: 1.5rem; line-height: 1.7; color: var(--text-muted);">${r.description}</p>
+                    <p style="margin-bottom: 1.5rem; line-height: 1.7; color: var(--text-muted);">${r.description || 'No description provided.'}</p>
+                    
                     ${r.photoUrl ? `
                         <div style="margin-bottom: 1.5rem;">
                             <img src="${r.photoUrl}" alt="Report evidence" class="photo-thumbnail" onclick="showPhotoModal('${r.photoUrl}')" style="width: 100px; height: 100px; object-fit: cover; border-radius: 8px; cursor: pointer; border: 2px solid var(--primary);">
                         </div>
                     ` : ''}
-                    <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1.5rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; color: var(--text-muted);">
-                        <span>Report ID: <code style="background: var(--surface-dark); padding: 0.25rem 0.5rem; border-radius: 4px; color: var(--primary);">${r.id.toString().slice(-6)}</code></span>
+
+                    ${r.authorityName ? `
+                        <div style="margin-top:1rem; padding:1rem; background:rgba(255,255,255,0.05); border-radius:8px; border-left: 3px solid var(--accent);">
+                            <small style="color:var(--text-muted); display:block; margin-bottom:0.5rem">HANDLED BY:</small>
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <i class="fas fa-user-shield" style="color:var(--accent)"></i>
+                                <strong>${r.authorityName}</strong>
+                                ${r.authorityContact ? `<span style="opacity:0.8; margin-left: 10px;"> <i class="fas fa-phone"></i> ${r.authorityContact}</span>` : ''}
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${r.status === 'resolved' && r.evidencePhotoUrl ? `
+                        <div style="margin-top:1rem; border-top:1px solid rgba(255,255,255,0.1); padding-top:1rem;">
+                            <strong style="color:var(--success)"><i class="fas fa-check-circle"></i> RESOLVED - EVIDENCE:</strong><br>
+                            <img src="${r.evidencePhotoUrl}" style="width:100%; max-width:300px; border-radius:8px; margin-top:10px; border:2px solid var(--success); cursor:pointer" onclick="showPhotoModal('${r.evidencePhotoUrl}')">
+                        </div>
+                    ` : ''}
+
+                    <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1.5rem; margin-top: 1rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; color: var(--text-muted);">
+                        <span>Report ID: <code style="background: var(--surface-dark); padding: 0.25rem 0.5rem; border-radius: 4px; color: var(--primary);">${(r.id || '').toString().slice(-6)}</code></span>
                         <span style="color: var(--primary);">+10 points earned</span>
                     </div>
                 </div>
             `).join("");
         } catch (error) {
+            console.error(error); // Log actual error
             showNotification('Failed to load reports: ' + error.message, 'error');
         }
     }
@@ -496,11 +521,12 @@ const MW = (() => {
             allReports = result.reports;
             const searchTerm = document.getElementById('searchReports')?.value.toLowerCase() || '';
             
+            // FIX: Safe navigation for all properties during filter to prevent crash
             const filteredReports = allReports.filter(r => 
-                r.reporterName.toLowerCase().includes(searchTerm) ||
-                r.incidentType.toLowerCase().includes(searchTerm) ||
-                r.description.toLowerCase().includes(searchTerm) ||
-                r.id.toString().includes(searchTerm)
+                (r.reporterName || '').toLowerCase().includes(searchTerm) ||
+                (r.incidentType || '').toLowerCase().includes(searchTerm) ||
+                (r.description || '').toLowerCase().includes(searchTerm) ||
+                (r.id || '').toString().includes(searchTerm)
             );
 
             if (filteredReports.length === 0) {
@@ -515,42 +541,122 @@ const MW = (() => {
                 return;
             }
 
+            // FIX: Added Number() cast for lat/lng
+            // FEATURE: Added "Take Case" and "Resolve" buttons
             tbody.innerHTML = filteredReports.map((r, index) => `
                 <tr style="animation: fadeInUp 0.3s ease ${index * 0.05}s both;">
-                    <td><code style="background: var(--surface-dark); padding: 0.25rem 0.5rem; border-radius: 4px; color: var(--primary); font-size: 0.8rem;">${r.id.toString().slice(-6)}</code></td>
-                    <td><strong>${r.reporterName}</strong><br><small style="color: var(--text-muted);">${r.reporterEmail}</small></td>
+                    <td><code style="background: var(--surface-dark); padding: 0.25rem 0.5rem; border-radius: 4px; color: var(--primary); font-size: 0.8rem;">${(r.id || '').toString().slice(-6)}</code></td>
+                    <td><strong>${r.reporterName || 'Anonymous'}</strong><br><small style="color: var(--text-muted);">${r.reporterEmail || ''}</small></td>
                     <td>
                         <span style="color: var(--primary);">
-                            <i class="fas fa-exclamation-triangle"></i> ${r.incidentType}
+                            <i class="fas fa-exclamation-triangle"></i> ${r.incidentType || 'Unknown'}
                         </span>
                     </td>
                     <td>
                         <i class="fas fa-map-marker-alt" style="color: var(--primary);"></i> 
-                        ${r.latitude.toFixed(4)}, ${r.longitude.toFixed(4)}
+                        ${Number(r.latitude || 0).toFixed(4)}, ${Number(r.longitude || 0).toFixed(4)}
                     </td>
                     <td style="font-size: 0.9rem;">${formatDate(r.createdAt)}</td>
-                    <td><span class="status ${getStatusColor(r.status)}">${r.status.toUpperCase()}</span></td>
+                    <td><span class="status ${getStatusColor(r.status)}">${(r.status || 'pending').toUpperCase()}</span></td>
                     <td>
                         ${r.photoUrl ? `<img src="${r.photoUrl}" alt="Evidence" class="photo-thumbnail" onclick="showPhotoModal('${r.photoUrl}')">` : '<span style="color: var(--text-muted);">No photo</span>'}
                     </td>
                     <td>
-                        <select onchange="updateReportStatus('${r.id}', this.value)" 
-                                style="padding: 0.5rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); 
-                                       background: var(--surface-light); color: var(--text); cursor: pointer; 
-                                       transition: all 0.3s ease;">
-                            <option value="pending" ${r.status === 'pending' ? 'selected' : ''}>Pending</option>
-                            <option value="investigating" ${r.status === 'investigating' ? 'selected' : ''}>Investigating</option>
-                            <option value="resolved" ${r.status === 'resolved' ? 'selected' : ''}>Resolved</option>
-                        </select>
+                        ${r.status === 'pending' ? `
+                            <button class="btn btn-outline" style="padding:0.25rem 0.5rem; font-size:0.8rem;" 
+                                onclick="takeCase('${r.id}')">
+                                <i class="fas fa-hand-paper"></i> Take Case
+                            </button>
+                        ` : ''}
+                        ${r.status === 'investigating' ? `
+                            <button class="btn btn-primary" style="padding:0.25rem 0.5rem; font-size:0.8rem;" 
+                                onclick="openResolveModal('${r.id}')">
+                                <i class="fas fa-check"></i> Resolve
+                            </button>
+                        ` : ''}
+                        ${r.status === 'resolved' ? '<i class="fas fa-check-circle" style="color:var(--success)"></i> Done' : ''}
                     </td>
                 </tr>
             `).join("");
         } catch (error) {
+            console.error(error);
             showNotification('Failed to load authority reports: ' + error.message, 'error');
         }
     }
 
     // Global functions
+    
+    // --- NEW: Take Case Function ---
+    window.takeCase = async (reportId) => {
+        const contact = prompt("Please enter your official contact number/email so the user can contact you:");
+        if (!contact) return;
+        
+        const user = FirebaseService.getCurrentUser();
+        // Fallback name if admin isn't properly profiled
+        const adminName = user ? (user.displayName || 'Authority Admin') : 'Authority Admin';
+
+        const result = await FirebaseService.assignAuthority(reportId, adminName, contact);
+        if (result.success) {
+            showNotification("Case assigned to you successfully!", "success");
+            renderAuthority();
+            updateStats();
+        } else {
+            showNotification("Error assigning case: " + result.error, "error");
+        }
+    };
+
+    // --- NEW: Open Resolve Modal ---
+    window.openResolveModal = (reportId) => {
+        document.getElementById('resolveReportId').value = reportId;
+        const modal = document.getElementById('resolveModal');
+        modal.classList.add('active');
+        // Force visibility in case CSS transition is tricky
+        modal.style.visibility = 'visible';
+        modal.style.opacity = '1';
+    };
+
+    // --- FIX: Close Modal Function ---
+    // This specifically removes the inline styles that were keeping the popup open
+    window.closeResolveModal = () => {
+        const modal = document.getElementById('resolveModal');
+        modal.classList.remove('active');
+        modal.style.visibility = ''; // Clears the inline style
+        modal.style.opacity = '';    // Clears the inline style
+    };
+
+    // --- NEW: Submit Resolution ---
+    window.submitResolution = async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('resolveSubmitBtn');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = 'Uploading...';
+        btn.disabled = true;
+
+        const reportId = document.getElementById('resolveReportId').value;
+        const file = document.getElementById('resolveEvidence').files[0];
+
+        if (!file) {
+            alert("Please upload photo evidence.");
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+            return;
+        }
+
+        const res = await FirebaseService.resolveReport(reportId, file);
+        if (res.success) {
+            showNotification("Report resolved successfully!", "success");
+            // Call the fixed close function
+            window.closeResolveModal();
+            renderAuthority();
+            updateStats();
+        } else {
+            showNotification("Error: " + res.error, "error");
+        }
+        
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    };
+
     window.updateReportStatus = async (reportId, newStatus) => {
         if (typeof FirebaseService === 'undefined') {
             showNotification('Firebase not initialized', 'error');
@@ -680,9 +786,10 @@ const MW = (() => {
         });
     };
 
+    // FIXED NOTIFICATION FUNCTION
     function showNotification(message, type = 'info') {
-        // Remove existing notifications
-        document.querySelectorAll('.notification').forEach(n => n.remove());
+        const existing = document.querySelectorAll('.notification');
+        existing.forEach(n => n.remove());
 
         const notification = document.createElement('div');
         notification.className = 'notification';
@@ -703,52 +810,50 @@ const MW = (() => {
 
         notification.style.cssText = `
             position: fixed;
-            top: 100px;
+            top: 20px;
             right: 20px;
             padding: 1.5rem 2rem;
             background: ${colors[type] || colors.info};
             color: white;
             border-radius: 12px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-            z-index: 10001;
+            z-index: 99999;
             transform: translateX(400px);
             transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             max-width: 400px;
             min-width: 300px;
             font-weight: 500;
-            border-left: 4px solid rgba(255,255,255,0.3);
+            display: flex;
+            align-items: center;
+            gap: 15px;
         `;
         
-        notification.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 0.75rem;">
-                <i class="fas ${icons[type] || icons.info}" style="font-size: 1.2rem;"></i>
-                <span>${message}</span>
-                <button onclick="this.parentElement.parentElement.remove()" 
-                        style="background: none; border: none; color: white; font-size: 1.2rem; 
-                               cursor: pointer; margin-left: auto; padding: 0.25rem; 
-                               border-radius: 4px; opacity: 0.8; transition: opacity 0.3s ease;"
-                        onmouseover="this.style.opacity='1'; this.style.background='rgba(255,255,255,0.2)'"
-                        onmouseout="this.style.opacity='0.8'; this.style.background='none'">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-        `;
+        const iconHtml = `<i class="fas ${icons[type] || icons.info}" style="font-size: 1.2rem;"></i>`;
+        const msgSpan = document.createElement('span');
+        msgSpan.textContent = message;
+        msgSpan.style.flexGrow = '1';
+
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '<i class="fas fa-times"></i>';
+        closeBtn.style.cssText = `background:none;border:none;color:white;font-size:1.2rem;cursor:pointer;padding:5px;opacity:0.8;`;
+        
+        closeBtn.onclick = function() {
+            notification.style.transform = 'translateX(400px)';
+            setTimeout(() => notification.remove(), 400);
+        };
+
+        notification.innerHTML = iconHtml;
+        notification.appendChild(msgSpan);
+        notification.appendChild(closeBtn);
         
         document.body.appendChild(notification);
+        requestAnimationFrame(() => notification.style.transform = 'translateX(0)');
         
-        // Animate in
         setTimeout(() => {
-            notification.style.transform = 'translateX(0)';
-        }, 100);
-        
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            notification.style.transform = 'translateX(400px)';
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.remove();
-                }
-            }, 400);
+            if (document.body.contains(notification)) {
+                notification.style.transform = 'translateX(400px)';
+                setTimeout(() => { if (document.body.contains(notification)) notification.remove(); }, 400);
+            }
         }, 5000);
     }
 
@@ -756,7 +861,6 @@ const MW = (() => {
         const loader = document.getElementById('loader');
         if (!loader) return;
 
-        // Enhanced loading sequence
         const loadingTexts = [
             'Initializing ecosystem protection platform...',
             'Connecting to Firebase...',
@@ -781,7 +885,6 @@ const MW = (() => {
             }
         }, 600);
 
-        // Hide loader after enhanced loading sequence
         setTimeout(() => {
             clearInterval(textInterval);
             loader.style.opacity = '0';
@@ -794,16 +897,9 @@ const MW = (() => {
     }
 
     function startStatsRefresh() {
-        // Clear any existing interval
-        if (statsRefreshInterval) {
-            clearInterval(statsRefreshInterval);
-        }
-        
-        // Refresh stats every 30 seconds
+        if (statsRefreshInterval) clearInterval(statsRefreshInterval);
         statsRefreshInterval = setInterval(() => {
-            if (window.location.hash !== '#offline') {
-                updateStats();
-            }
+            if (window.location.hash !== '#offline') updateStats();
         }, 30000);
     }
 
@@ -815,10 +911,8 @@ const MW = (() => {
     }
 
     function onReady() {
-        // Check if Firebase is loaded
         if (typeof FirebaseService === 'undefined') {
             showNotification('Firebase configuration not loaded. Please check config.js', 'error');
-            console.error('FirebaseService is not defined. Make sure config.js is loaded before app.js');
             return;
         }
 
@@ -852,7 +946,6 @@ const Navigation = (() => {
     let currentPage = 'home';
 
     function showPage(pageName) {
-        // Hide all pages with fade out
         document.querySelectorAll('.page').forEach(page => {
             page.style.opacity = '0';
             page.style.transform = 'translateY(20px)';
@@ -861,7 +954,6 @@ const Navigation = (() => {
             }, 300);
         });
 
-        // Show selected page with fade in
         setTimeout(() => {
             const targetPage = document.getElementById(`${pageName}-page`);
             if (targetPage) {
@@ -873,7 +965,6 @@ const Navigation = (() => {
                 }, 50);
             }
 
-            // Update navigation active state with smooth transition
             document.querySelectorAll('.nav-link').forEach(link => {
                 link.classList.remove('active');
                 link.style.transform = '';
@@ -888,7 +979,6 @@ const Navigation = (() => {
                 }, 200);
             }
 
-            // Update page-specific content
             switch(pageName) {
                 case 'leaderboard':
                     MW.renderLeaderboard();
@@ -902,7 +992,6 @@ const Navigation = (() => {
                 case 'authority-login':
                 case 'user-login':
                 case 'user-register':
-                    // Clear login forms
                     setTimeout(() => {
                         const formId = pageName === 'authority-login' ? 'authorityLoginForm' :
                                       pageName === 'user-login' ? 'userLoginForm' : 'userRegisterForm';
@@ -916,7 +1005,6 @@ const Navigation = (() => {
             closeMobileMenu();
         }, 300);
 
-        // Smooth scroll to top
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -951,14 +1039,12 @@ const Navigation = (() => {
         icon.style.transform = 'rotate(0deg)';
     }
 
-    // Mobile menu toggle
     document.addEventListener('DOMContentLoaded', () => {
         const mobileToggle = document.getElementById('mobileToggle');
         if (mobileToggle) {
             mobileToggle.addEventListener('click', toggleMobileMenu);
         }
 
-        // Close mobile menu when clicking outside
         document.addEventListener('click', (e) => {
             const navMenu = document.getElementById('navMenu');
             const mobileToggle = document.getElementById('mobileToggle');
@@ -970,7 +1056,6 @@ const Navigation = (() => {
             }
         });
 
-        // Add ripple effect to buttons
         document.querySelectorAll('.btn').forEach(btn => {
             btn.addEventListener('click', function(e) {
                 const ripple = document.createElement('span');
@@ -1002,7 +1087,6 @@ const Navigation = (() => {
             });
         });
 
-        // Add CSS for ripple animation
         const style = document.createElement('style');
         style.textContent = `
             @keyframes ripple {
@@ -1018,64 +1102,42 @@ const Navigation = (() => {
     return { showPage, closeMobileMenu };
 })();
 
-// Make showPage globally available
 window.showPage = Navigation.showPage;
 
-// Enhanced keyboard navigation
 document.addEventListener('keydown', (e) => {
     if (e.altKey) {
         e.preventDefault();
         try {
             switch(e.key) {
-                case '1':
-                    showPage('home');
-                    break;
-                case '2':
-                    checkAuthAndNavigate('report');
-                    break;
-                case '3':
-                    showPage('leaderboard');
-                    break;
-                case '4':
-                    checkAuthAndNavigate('myreports');
-                    break;
-                case '5':
-                    showPage('authority-login');
-                    break;
-                case '6':
-                    showPage('user-login');
-                    break;
+                case '1': showPage('home'); break;
+                case '2': checkAuthAndNavigate('report'); break;
+                case '3': showPage('leaderboard'); break;
+                case '4': checkAuthAndNavigate('myreports'); break;
+                case '5': showPage('authority-login'); break;
+                case '6': showPage('user-login'); break;
             }
         } catch (error) {
             console.error('Keyboard navigation failed:', error);
         }
     }
     
-    // ESC key to close mobile menu or photo modal
     if (e.key === 'Escape') {
         const navMenu = document.getElementById('navMenu');
-        if (navMenu && navMenu.classList.contains('active')) {
-            Navigation.closeMobileMenu();
-        }
-        
+        if (navMenu && navMenu.classList.contains('active')) Navigation.closeMobileMenu();
         const photoModal = document.querySelector('.photo-modal');
-        if (photoModal) {
-            photoModal.remove();
-        }
+        if (photoModal) photoModal.remove();
+        // Close Resolve Modal if open
+        const resolveModal = document.getElementById('resolveModal');
+        if (resolveModal && resolveModal.classList.contains('active')) window.closeResolveModal();
     }
 });
 
-// Performance optimization: Lazy load heavy content
 const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
-        if (entry.isIntersecting) {
-            entry.target.classList.add('animate-in');
-        }
+        if (entry.isIntersecting) entry.target.classList.add('animate-in');
     });
 }, { threshold: 0.1 });
 
 document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('.card, .stat-card').forEach(el => {
-        observer.observe(el);
-    });
+    document.querySelectorAll('.card, .stat-card').forEach(el => observer.observe(el));
 });
