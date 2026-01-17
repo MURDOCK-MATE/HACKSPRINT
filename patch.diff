@@ -1,0 +1,200 @@
+--- a/index.html
++++ b/index.html
+@@
+-    <script src="supabase-config.js"></script>
++    <script src="config.js"></script>
+     <script src="app.js"></script>
+--- a/app.js
++++ b/app.js
+@@
+ function bindUserRegister() {
+   const form = document.getElementById('userRegisterForm');
+   form.addEventListener('submit', async (e) => {
+     e.preventDefault();
+     const submitBtn = document.getElementById('userRegisterSubmit');
+     const originalHTML = submitBtn.innerHTML;
+-    // Show loading state
+-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Account...';
+-    submitBtn.disabled = true;
+-
+-    const result = await SupabaseService.registerUser(email, password, fullName, phone);
+-
+-    if (result.success) {
+-      currentUser = result.user;
+-      submitBtn.innerHTML = '<i class="fas fa-check"></i> Account Created!';
+-      submitBtn.style.background = 'var(--success)';
+-      
+-      if (result.needsEmailConfirmation) {
+-        showNotification(`Account created! Please check your email to confirm your account.`, "info");
+-      } else {
+-        showNotification(`Welcome to Mangrove Watch, ${fullName}!`, "success");
+-      }
+-
+-      setTimeout(() => {
+-        showPage('home');
+-      }, 1500);
+-    } else {
+-      showNotification(result.error, "error");
+-      submitBtn.innerHTML = originalHTML;
+-      submitBtn.disabled = false;
+-    }
++    // Show loading state
++    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Account...';
++    submitBtn.disabled = true;
++
++    try {
++      const result = await SupabaseService.registerUser(email, password, fullName, phone);
++
++      if (result.success) {
++        currentUser = result.user;
++        submitBtn.innerHTML = '<i class="fas fa-check"></i> Account Created!';
++        submitBtn.style.background = 'var(--success)';
++
++        if (result.needsEmailConfirmation) {
++          showNotification(`Account created! Please check your email to confirm your account.`, "info");
++        } else {
++          showNotification(`Welcome to Mangrove Watch, ${fullName}!`, "success");
++        }
++
++        setTimeout(() => {
++          showPage('home');
++        }, 1500);
++      } else {
++        showNotification(result.error, "error");
++        submitBtn.innerHTML = originalHTML;
++        submitBtn.disabled = false;
++      }
++    } catch (err) {
++      showNotification('Registration failed: ' + (err?.message || err), 'error');
++      submitBtn.innerHTML = originalHTML;
++      submitBtn.disabled = false;
++    }
+   });
+ }
+ 
+@@
+ function bindUserLogin() {
+   const form = document.getElementById('userLoginForm');
+   form.addEventListener('submit', async (e) => {
+     e.preventDefault();
+     const submitBtn = document.getElementById('userLoginSubmit');
+     const originalHTML = submitBtn.innerHTML;
+-    // Show loading state
+-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing In...';
+-    submitBtn.disabled = true;
+-
+-    const result = await SupabaseService.loginUser(email, password);
+-
+-    if (result.success) {
+-      currentUser = result.user;
+-      submitBtn.innerHTML = '<i class="fas fa-check"></i> Signed In!';
+-      submitBtn.style.background = 'var(--success)';
+-      setTimeout(() => { showPage('home'); }, 1500);
+-    } else {
+-      showNotification(result.error, "error");
+-      submitBtn.innerHTML = originalHTML;
+-      submitBtn.disabled = false;
+-    }
++    // Show loading state
++    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing In...';
++    submitBtn.disabled = true;
++
++    try {
++      const result = await SupabaseService.loginUser(email, password);
++
++      if (result.success) {
++        currentUser = result.user;
++        submitBtn.innerHTML = '<i class="fas fa-check"></i> Signed In!';
++        submitBtn.style.background = 'var(--success)';
++        setTimeout(() => { showPage('home'); }, 1500);
++      } else {
++        showNotification(result.error, "error");
++        submitBtn.innerHTML = originalHTML;
++        submitBtn.disabled = false;
++      }
++    } catch (err) {
++      showNotification('Login failed: ' + (err?.message || err), 'error');
++      submitBtn.innerHTML = originalHTML;
++      submitBtn.disabled = false;
++    }
+   });
+ }
+ 
+@@
+ function bindAuthorityLogin() {
+   const form = document.getElementById('authorityLoginForm');
+   form.addEventListener('submit', async (e) => {
+     e.preventDefault();
+     const submitBtn = document.getElementById('authorityLoginSubmit');
+     const originalHTML = submitBtn.innerHTML;
+-    // Show loading state
+-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Authenticating...';
+-    submitBtn.disabled = true;
+-
+-    // Simulate API delay
+-    await new Promise(resolve => setTimeout(resolve, 1500));
+-
+-    // Check credentials (demo: admin@mangrovewatch.com / admin123)
+-    if (email === 'admin@mangrovewatch.com' && password === 'admin123') {
+-      isAuthorityAuthenticated = true;
+-      submitBtn.innerHTML = '<i class="fas fa-check"></i> Login Successful!';
+-      submitBtn.style.background = 'var(--success)';
+-      showNotification("Welcome to Authority Dashboard!", "success");
+-      setTimeout(() => { showPage('authority'); }, 1500);
+-    } else {
+-      showNotification("Invalid credentials. Please check your email and password.", "error");
+-      submitBtn.innerHTML = originalHTML;
+-      submitBtn.disabled = false;
+-    }
++    // Show loading state
++    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Authenticating...';
++    submitBtn.disabled = true;
++
++    try {
++      // Simulate API delay
++      await new Promise(resolve => setTimeout(resolve, 1500));
++
++      // Check credentials (demo: admin@mangrovewatch.com / admin123)
++      if (email === 'admin@mangrovewatch.com' && password === 'admin123') {
++        isAuthorityAuthenticated = true;
++        submitBtn.innerHTML = '<i class="fas fa-check"></i> Login Successful!';
++        submitBtn.style.background = 'var(--success)';
++        showNotification("Welcome to Authority Dashboard!", "success");
++        setTimeout(() => { showPage('authority'); }, 1500);
++      } else {
++        showNotification("Invalid credentials. Please check your email and password.", "error");
++        submitBtn.innerHTML = originalHTML;
++        submitBtn.disabled = false;
++      }
++    } catch (err) {
++      showNotification('Authority login failed: ' + (err?.message || err), 'error');
++      submitBtn.innerHTML = originalHTML;
++      submitBtn.disabled = false;
++    }
+   });
+ }
+@@
+ async function renderLeaderboard() {
+-  const leaders = await SupabaseService.getLeaderboard();
+-  // existing render logic
++  if (typeof SupabaseService === 'undefined') {
++    showNotification('Configuration script failed to load', 'error');
++    return;
++  }
++  try {
++    const leaders = await SupabaseService.getLeaderboard();
++    // existing render logic
++  } catch (error) {
++    showNotification('Failed to load leaderboard', 'error');
++  }
+ }
+ 
+ async function updateStats() {
+-  // existing stats logic
++  if (typeof SupabaseService === 'undefined') return;
++  try {
++    // existing stats logic
++  } catch (error) {
++    console.error('Stats update failed:', error);
++  }
+ }
